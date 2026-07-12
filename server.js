@@ -31,7 +31,7 @@ async function connectDB() {
 }
 
 // Import models
-const { User, Message } = require('./lib/models');
+import {User, Message} from './lib/models.ts';
 
 app.prepare().then(() => {
   const server = createServer(async (req, res) => {
