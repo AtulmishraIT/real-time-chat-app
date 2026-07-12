@@ -37,7 +37,7 @@ export default function Page() {
       const data = await response.json();
       setMessages(data.messages || []);
     } catch (error) {
-      console.error('[v0] Error fetching messages:', error);
+      console.error(' Error fetching messages:', error);
     }
   }, []);
 
@@ -49,7 +49,7 @@ export default function Page() {
       const data = await response.json();
       setOnlineUsers(data.users || []);
     } catch (error) {
-      console.error('[v0] Error fetching users:', error);
+      console.error(' Error fetching users:', error);
     }
   }, []);
 
@@ -93,7 +93,7 @@ export default function Page() {
         setJoined(true);
         await fetchMessages();
       } catch (error) {
-        console.error('[v0] Error joining chat:', error);
+        console.error(' Error joining chat:', error);
         alert('Failed to join chat');
       }
     }
@@ -113,12 +113,12 @@ export default function Page() {
         });
         if (!response.ok) {
           const errorData = await response.json();
-          console.error('[v0] API error:', errorData);
+          console.error(' API error:', errorData);
           throw new Error(errorData.error || 'Failed to send message');
         }
         await fetchMessages();
       } catch (error) {
-        console.error('[v0] Error sending message:', error);
+        console.error(' Error sending message:', error);
       }
     }
   };
