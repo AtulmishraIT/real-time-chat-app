@@ -30,8 +30,24 @@ async function connectDB() {
   }
 }
 
-// Import models
-const { User, Message } = require('./lib/models');
+// Define Mongoose schemas
+const userSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  status: { type: String, default: 'offline' },
+  socketId: String,
+  createdAt: { type: Date, default: Date.now },
+});
+
+const messageSchema = new mongoose.Schema({
+  roomId: { type: String, required: true },
+  userId: mongoose.Schema.Types.ObjectId,
+  username: { type: String, required: true },
+  content: { type: String, required: true },
+  timestamp: { type: Date, default: Date.now },
+});
+
+const User = mongoose.model('User', userSchema);
+const Message = mongoose.model('Message', messageSchema);
 
 app.prepare().then(() => {
   const server = createServer(async (req, res) => {

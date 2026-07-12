@@ -13,7 +13,6 @@ export function useSocket(options: UseSocketOptions = {}) {
   useEffect(() => {
     const socketIOClient = io(undefined, {
       transports: ['websocket', 'polling'],
-      path: '/api/socket',
     });
 
     socketRef.current = socketIOClient;
