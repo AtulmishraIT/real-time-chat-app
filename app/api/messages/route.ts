@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       .sort({ timestamp: 1 })
       .limit(100);
 
-    return NextResponse.json(messages);
+    return NextResponse.json({ messages });
   } catch (error) {
     console.error('Error fetching messages:', error);
     return NextResponse.json(
@@ -44,15 +44,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const user = await User.findOne({ username });
     const message = await Message.create({
       roomId,
-      userId,
+      userId: user?._id,
       username,
       content,
       timestamp: new Date(),
     });
 
-    return NextResponse.json(message, { status: 201 });
+    return NextResponse.json({ message }, { status: 201 });
   } catch (error) {
     console.error('Error creating message:', error);
     return NextResponse.json(
