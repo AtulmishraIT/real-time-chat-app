@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
 
     const users = await User.find({ status: 'online' }).select('username status');
 
-    return NextResponse.json(users);
+    return NextResponse.json({ users });
   } catch (error) {
     console.error('Error fetching users:', error);
     return NextResponse.json(
@@ -37,11 +37,14 @@ export async function POST(request: NextRequest) {
     if (!user) {
       user = await User.create({
         username,
-        status: 'offline',
+        status: 'online',
       });
+    } else {
+      user.status = 'online';
+      await user.save();
     }
 
-    return NextResponse.json(user, { status: 201 });
+    return NextResponse.json({ user }, { status: 201 });
   } catch (error) {
     console.error('Error creating user:', error);
     return NextResponse.json(

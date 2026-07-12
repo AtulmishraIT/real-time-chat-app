@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import ChatContainer from '@/components/ChatContainer';
-import { useSocket } from '@/lib/useSocket';
 
 interface Message {
   _id?: string;
@@ -18,6 +17,7 @@ interface User {
 }
 
 const ROOM_ID = 'general';
+const POLL_INTERVAL = 1000; // Poll every 1 second
 
 export default function Page() {
   const [currentUser, setCurrentUser] = useState('');
@@ -26,95 +26,114 @@ export default function Page() {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [username, setUsername] = useState('');
   const [joined, setJoined] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const { isConnected, emit, on, off } = useSocket({
-    onConnect: () => {
-      console.log('[v0] Socket connected');
-    },
-    onDisconnect: () => {
-      console.log('[v0] Socket disconnected');
-    },
-  });
-
-  // Handle room messages
-  const handleReceiveMessage = useCallback((data: Message) => {
-    console.log('[v0] Received message:', data);
-    setMessages((prev) => [...prev, data]);
+  // Fetch messages from API
+  const fetchMessages = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/messages?roomId=${ROOM_ID}`);
+      if (!response.ok) throw new Error('Failed to fetch messages');
+      const data = await response.json();
+      setMessages(data.messages || []);
+    } catch (error) {
+      console.error('[v0] Error fetching messages:', error);
+    }
   }, []);
 
-  // Handle typing users
-  const handleTypingUsers = useCallback((users: string[]) => {
-    console.log('[v0] Typing users:', users);
-    setTypingUsers(users);
+  // Fetch online users
+  const fetchOnlineUsers = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/users?roomId=${ROOM_ID}`);
+      if (!response.ok) throw new Error('Failed to fetch users');
+      const data = await response.json();
+      setOnlineUsers(data.users || []);
+    } catch (error) {
+      console.error('[v0] Error fetching users:', error);
+    }
   }, []);
 
-  // Handle online users
-  const handleOnlineUsers = useCallback((users: User[]) => {
-    console.log('[v0] Online users:', users);
-    setOnlineUsers(users);
-  }, []);
-
-  // Handle message history
-  const handleMessageHistory = useCallback((msgs: Message[]) => {
-    console.log('[v0] Message history received:', msgs.length);
-    setMessages(msgs);
-  }, []);
-
-  // Setup socket listeners
+  // Poll for updates
   useEffect(() => {
-    if (!isConnected) return;
+    if (!joined || !currentUser) return;
 
-    on('receive_message', handleReceiveMessage);
-    on('typing_users', handleTypingUsers);
-    on('online_users', handleOnlineUsers);
-    on('message_history', handleMessageHistory);
+    const poll = async () => {
+      await Promise.all([fetchMessages(), fetchOnlineUsers()]);
+    };
+
+    // Initial poll
+    poll();
+
+    // Set up interval
+    pollIntervalRef.current = setInterval(poll, POLL_INTERVAL);
 
     return () => {
-      off('receive_message', handleReceiveMessage);
-      off('typing_users', handleTypingUsers);
-      off('online_users', handleOnlineUsers);
-      off('message_history', handleMessageHistory);
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
     };
-  }, [isConnected, on, off, handleReceiveMessage, handleTypingUsers, handleOnlineUsers, handleMessageHistory]);
+  }, [joined, currentUser, fetchMessages, fetchOnlineUsers]);
 
-  // Join room when user is set
-  useEffect(() => {
-    if (joined && currentUser && isConnected) {
-      console.log('[v0] Joining room:', ROOM_ID, 'as', currentUser);
-      emit('join_room', { roomId: ROOM_ID, username: currentUser });
-      emit('get_messages', { roomId: ROOM_ID });
-    }
-  }, [joined, currentUser, isConnected, emit]);
-
-  const handleJoinChat = (e: React.FormEvent) => {
+  const handleJoinChat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (username.trim()) {
-      setCurrentUser(username);
-      setJoined(true);
+      try {
+        // Register user
+        const response = await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: username.trim(),
+            roomId: ROOM_ID,
+          }),
+        });
+        if (!response.ok) throw new Error('Failed to join chat');
+        
+        setCurrentUser(username.trim());
+        setJoined(true);
+        await fetchMessages();
+      } catch (error) {
+        console.error('[v0] Error joining chat:', error);
+        alert('Failed to join chat');
+      }
     }
   };
 
-  const handleSendMessage = (message: string) => {
+  const handleSendMessage = async (message: string) => {
     if (message.trim() && currentUser) {
-      console.log('[v0] Sending message:', message);
-      emit('send_message', {
-        roomId: ROOM_ID,
-        username: currentUser,
-        content: message,
-      });
+      try {
+        const response = await fetch('/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            roomId: ROOM_ID,
+            username: currentUser,
+            content: message.trim(),
+          }),
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('[v0] API error:', errorData);
+          throw new Error(errorData.error || 'Failed to send message');
+        }
+        await fetchMessages();
+      } catch (error) {
+        console.error('[v0] Error sending message:', error);
+      }
     }
   };
 
   const handleTyping = () => {
-    if (currentUser) {
-      emit('typing', { roomId: ROOM_ID, username: currentUser });
-    }
+    setTypingUsers((prev) => {
+      if (!prev.includes(currentUser) && currentUser) {
+        return [...prev, currentUser];
+      }
+      return prev;
+    });
   };
 
   const handleStopTyping = () => {
-    if (currentUser) {
-      emit('stop_typing', { roomId: ROOM_ID, username: currentUser });
-    }
+    setTypingUsers((prev) => prev.filter((u) => u !== currentUser));
   };
 
   if (!joined) {
@@ -143,18 +162,12 @@ export default function Page() {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Enter your username"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={!isConnected}
               />
-              {!isConnected && (
-                <p className="mt-2 text-sm text-yellow-600">
-                  Connecting to server...
-                </p>
-              )}
             </div>
 
             <button
               type="submit"
-              disabled={!username.trim() || !isConnected}
+              disabled={!username.trim()}
               className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium transition-colors"
             >
               Join Chat
@@ -162,7 +175,7 @@ export default function Page() {
           </form>
 
           <p className="text-center text-sm text-gray-500">
-            {isConnected ? 'Connected to server' : 'Connecting...'}
+            {isConnected ? 'Ready to connect' : 'Connecting...'}
           </p>
         </div>
       </main>
