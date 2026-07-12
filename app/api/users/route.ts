@@ -1,0 +1,52 @@
+import { NextRequest, NextResponse } from 'next/server';
+import dbConnect from '@/lib/db';
+import { User } from '@/lib/models';
+
+export async function GET(request: NextRequest) {
+  try {
+    await dbConnect();
+
+    const users = await User.find({ status: 'online' }).select('username status');
+
+    return NextResponse.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch users' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    await dbConnect();
+
+    const body = await request.json();
+    const { username } = body;
+
+    if (!username) {
+      return NextResponse.json(
+        { error: 'username is required' },
+        { status: 400 }
+      );
+    }
+
+    let user = await User.findOne({ username });
+
+    if (!user) {
+      user = await User.create({
+        username,
+        status: 'offline',
+      });
+    }
+
+    return NextResponse.json(user, { status: 201 });
+  } catch (error) {
+    console.error('Error creating user:', error);
+    return NextResponse.json(
+      { error: 'Failed to create user' },
+      { status: 500 }
+    );
+  }
+}
