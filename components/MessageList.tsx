@@ -45,7 +45,7 @@ export default function MessageList({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-white p-6 space-y-4">
+    <div className="flex-1 overflow-y-auto overflow-y-hidden bg-white p-6 space-y-4">
       {messages.length === 0 ? (
         <div className="flex items-center justify-center h-full text-gray-400">
           <p>No messages yet. Start the conversation!</p>
