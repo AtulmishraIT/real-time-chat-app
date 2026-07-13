@@ -5,8 +5,19 @@ import { User } from '@/lib/models';
 export async function GET(request: NextRequest) {
   try {
     await dbConnect();
+    const { searchParams } = new URL(request.url);
+    const query = searchParams.get('query');
 
-    const users = await User.find({ status: 'online' }).select('username status');
+    if (query) {
+      // Search users by username
+      const users = await User.find({
+        username: { $regex: query, $options: 'i' },
+      }).select('username status -password');
+      return NextResponse.json({ users });
+    }
+
+    // Get all online users
+    const users = await User.find({ status: 'online' }).select('username status -password');
 
     return NextResponse.json({ users });
   } catch (error) {
@@ -23,7 +34,16 @@ export async function POST(request: NextRequest) {
     await dbConnect();
 
     const body = await request.json();
-    const { username } = body;
+    const { action, username } = body;
+
+    if (action === 'logout') {
+      const user = await User.findOne({ username });
+      if (user) {
+        user.status = 'offline';
+        await user.save();
+      }
+      return NextResponse.json({ success: true });
+    }
 
     if (!username) {
       return NextResponse.json(

@@ -4,31 +4,14 @@ import { useState } from 'react';
 
 interface MessageInputProps {
   onSend: (message: string) => void;
-  onTyping: () => void;
-  onStopTyping: () => void;
   disabled?: boolean;
 }
 
 export default function MessageInput({
   onSend,
-  onTyping,
-  onStopTyping,
   disabled = false,
 }: MessageInputProps) {
   const [message, setMessage] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setMessage(e.target.value);
-
-    if (!isTyping && e.target.value.trim()) {
-      setIsTyping(true);
-      onTyping();
-    } else if (isTyping && !e.target.value.trim()) {
-      setIsTyping(false);
-      onStopTyping();
-    }
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,13 +19,10 @@ export default function MessageInput({
     if (message.trim() && !disabled) {
       onSend(message.trim());
       setMessage('');
-      setIsTyping(false);
-      onStopTyping();
     }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Handle CJK IME composition
     if (e.nativeEvent.isComposing) return;
 
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -60,11 +40,11 @@ export default function MessageInput({
         <input
           type="text"
           value={message}
-          onChange={handleChange}
+          onChange={(e) => setMessage(e.target.value)}
           onKeyPress={handleKeyPress}
           placeholder="Type a message..."
           disabled={disabled}
-          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:text-gray-900 text-gray-900 disabled:cursor-not-allowed"
+          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 text-gray-900 disabled:cursor-not-allowed"
         />
         <button
           type="submit"

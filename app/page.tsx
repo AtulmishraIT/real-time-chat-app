@@ -2,12 +2,16 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import ChatContainer from '@/components/ChatContainer';
+import AuthForm from '@/components/AuthForm';
 
 interface Message {
   _id?: string;
   username: string;
   content: string;
   timestamp: Date | string;
+  edited?: boolean;
+  editedAt?: Date | string;
+  deleted?: boolean;
 }
 
 interface User {
@@ -17,54 +21,67 @@ interface User {
 }
 
 const ROOM_ID = 'general';
-const POLL_INTERVAL = 1000; // Poll every 1 second
+const POLL_INTERVAL = 1000;
 
 export default function Page() {
   const [currentUser, setCurrentUser] = useState('');
+  const [token, setToken] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
-  const [username, setUsername] = useState('');
-  const [joined, setJoined] = useState(false);
-  const [isConnected, setIsConnected] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch messages from API
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    const savedToken = localStorage.getItem('authToken');
+    const savedUsername = localStorage.getItem('username');
+
+    if (savedToken && savedUsername) {
+      setToken(savedToken);
+      setCurrentUser(savedUsername);
+      setIsAuthenticated(true);
+    }
+    setIsLoading(false);
+  }, []);
+
+  // Fetch messages
   const fetchMessages = useCallback(async () => {
+    if (!token) return;
     try {
       const response = await fetch(`/api/messages?roomId=${ROOM_ID}`);
       if (!response.ok) throw new Error('Failed to fetch messages');
       const data = await response.json();
-      setMessages(data.messages || []);
+      // Filter out deleted messages
+      setMessages((data.messages || []).filter((m: Message) => !m.deleted));
     } catch (error) {
-      console.error(' Error fetching messages:', error);
+      console.error('[v0] Error fetching messages:', error);
     }
-  }, []);
+  }, [token]);
 
   // Fetch online users
   const fetchOnlineUsers = useCallback(async () => {
+    if (!token) return;
     try {
-      const response = await fetch(`/api/users?roomId=${ROOM_ID}`);
+      const response = await fetch(`/api/users`);
       if (!response.ok) throw new Error('Failed to fetch users');
       const data = await response.json();
       setOnlineUsers(data.users || []);
     } catch (error) {
-      console.error(' Error fetching users:', error);
+      console.error('[v0] Error fetching users:', error);
     }
-  }, []);
+  }, [token]);
 
   // Poll for updates
   useEffect(() => {
-    if (!joined || !currentUser) return;
+    if (!isAuthenticated || !currentUser || !token) return;
 
     const poll = async () => {
       await Promise.all([fetchMessages(), fetchOnlineUsers()]);
     };
 
-    // Initial poll
     poll();
-
-    // Set up interval
     pollIntervalRef.current = setInterval(poll, POLL_INTERVAL);
 
     return () => {
@@ -72,35 +89,36 @@ export default function Page() {
         clearInterval(pollIntervalRef.current);
       }
     };
-  }, [joined, currentUser, fetchMessages, fetchOnlineUsers]);
+  }, [isAuthenticated, currentUser, token, fetchMessages, fetchOnlineUsers]);
 
-  const handleJoinChat = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (username.trim()) {
-      try {
-        // Register user
-        const response = await fetch('/api/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: username.trim(),
-            roomId: ROOM_ID,
-          }),
-        });
-        if (!response.ok) throw new Error('Failed to join chat');
-        
-        setCurrentUser(username.trim());
-        setJoined(true);
-        await fetchMessages();
-      } catch (error) {
-        console.error(' Error joining chat:', error);
-        alert('Failed to join chat');
-      }
+  const handleAuthSuccess = (username: string, authToken: string) => {
+    setCurrentUser(username);
+    setToken(authToken);
+    setIsAuthenticated(true);
+    localStorage.setItem('authToken', authToken);
+    localStorage.setItem('username', username);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout', username: currentUser }),
+      });
+    } catch (error) {
+      console.error('[v0] Error logging out:', error);
     }
+    
+    setCurrentUser('');
+    setToken('');
+    setIsAuthenticated(false);
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('username');
   };
 
   const handleSendMessage = async (message: string) => {
-    if (message.trim() && currentUser) {
+    if (message.trim() && currentUser && token) {
       try {
         const response = await fetch('/api/messages', {
           method: 'POST',
@@ -111,75 +129,55 @@ export default function Page() {
             content: message.trim(),
           }),
         });
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error(' API error:', errorData);
-          throw new Error(errorData.error || 'Failed to send message');
-        }
+        if (!response.ok) throw new Error('Failed to send message');
         await fetchMessages();
       } catch (error) {
-        console.error(' Error sending message:', error);
+        console.error('[v0] Error sending message:', error);
       }
     }
   };
 
-  const handleTyping = () => {
-    setTypingUsers((prev) => {
-      if (!prev.includes(currentUser) && currentUser) {
-        return [...prev, currentUser];
-      }
-      return prev;
-    });
+  const handleEditMessage = async (messageId: string, newContent: string) => {
+    try {
+      const response = await fetch('/api/messages', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageId,
+          content: newContent,
+          username: currentUser,
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to edit message');
+      await fetchMessages();
+    } catch (error) {
+      console.error('[v0] Error editing message:', error);
+    }
   };
 
-  const handleStopTyping = () => {
-    setTypingUsers((prev) => prev.filter((u) => u !== currentUser));
+  const handleDeleteMessage = async (messageId: string) => {
+    try {
+      const response = await fetch(
+        `/api/messages?messageId=${messageId}&username=${currentUser}`,
+        { method: 'DELETE' }
+      );
+      if (!response.ok) throw new Error('Failed to delete message');
+      await fetchMessages();
+    } catch (error) {
+      console.error('[v0] Error deleting message:', error);
+    }
   };
 
-  if (!joined) {
+  if (isLoading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-white">
-        <div className="w-full max-w-md space-y-8">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold text-gray-900">Chat Room</h1>
-            <p className="mt-2 text-gray-600">
-              Enter your username to join the conversation
-            </p>
-          </div>
-
-          <form onSubmit={handleJoinChat} className="space-y-4">
-            <div>
-              <label
-                htmlFor="username"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Username
-              </label>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={!username.trim()}
-              className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium transition-colors"
-            >
-              Join Chat
-            </button>
-          </form>
-
-          <p className="text-center text-sm text-gray-500">
-            {isConnected ? 'Ready to connect' : 'Connecting...'}
-          </p>
-        </div>
+        <p className="text-gray-600">Loading...</p>
       </main>
     );
+  }
+
+  if (!isAuthenticated) {
+    return <AuthForm onAuthSuccess={handleAuthSuccess} />;
   }
 
   return (
@@ -187,11 +185,12 @@ export default function Page() {
       messages={messages}
       currentUser={currentUser}
       onSendMessage={handleSendMessage}
-      onTyping={handleTyping}
-      onStopTyping={handleStopTyping}
+      onEditMessage={handleEditMessage}
+      onDeleteMessage={handleDeleteMessage}
       typingUsers={typingUsers}
       onlineUsers={onlineUsers}
-      isConnected={isConnected}
+      isConnected={true}
+      onLogout={handleLogout}
     />
   );
 }

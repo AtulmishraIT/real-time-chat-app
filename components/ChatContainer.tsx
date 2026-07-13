@@ -10,6 +10,7 @@ interface Message {
   username: string;
   content: string;
   timestamp: Date | string;
+  editedAt?: Date | string;
 }
 
 interface User {
@@ -22,22 +23,24 @@ interface ChatContainerProps {
   messages: Message[];
   currentUser: string;
   onSendMessage: (message: string) => void;
-  onTyping: () => void;
-  onStopTyping: () => void;
+  onEditMessage: (messageId: string, newContent: string) => void;
+  onDeleteMessage: (messageId: string) => void;
   typingUsers: string[];
   onlineUsers: User[];
   isConnected: boolean;
+  onLogout: () => void;
 }
 
 export default function ChatContainer({
   messages,
   currentUser,
   onSendMessage,
-  onTyping,
-  onStopTyping,
+  onEditMessage,
+  onDeleteMessage,
   typingUsers,
   onlineUsers,
   isConnected,
+  onLogout,
 }: ChatContainerProps) {
   return (
     <div className="flex h-screen bg-white">
@@ -52,25 +55,36 @@ export default function ChatContainer({
                 {isConnected ? 'Connected' : 'Disconnected'}
               </p>
             </div>
-            <div className="text-right">
-              <p className="text-sm font-medium text-gray-700">
-                {currentUser}
-              </p>
-              <div
-                className={`w-3 h-3 rounded-full mx-auto mt-1 ${
-                  isConnected ? 'bg-green-500' : 'bg-gray-300'
-                }`}
-              ></div>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-sm font-medium text-gray-700">
+                  {currentUser}
+                </p>
+                <div
+                  className={`w-3 h-3 rounded-full mx-auto mt-1 ${
+                    isConnected ? 'bg-green-500' : 'bg-gray-300'
+                  }`}
+                ></div>
+              </div>
+              <button
+                onClick={onLogout}
+                className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+              >
+                Logout
+              </button>
             </div>
           </div>
         </div>
 
-        <MessageList messages={messages} currentUser={currentUser} />
+        <MessageList 
+          messages={messages} 
+          currentUser={currentUser}
+          onEditMessage={onEditMessage}
+          onDeleteMessage={onDeleteMessage}
+        />
         <TypingIndicator typingUsers={typingUsers} currentUser={currentUser} />
         <MessageInput
           onSend={onSendMessage}
-          onTyping={onTyping}
-          onStopTyping={onStopTyping}
           disabled={!isConnected}
         />
       </div>
