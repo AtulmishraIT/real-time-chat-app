@@ -20,12 +20,12 @@ interface User {
   status?: string;
 }
 
-const ROOM_ID = 'general';
 const POLL_INTERVAL = 1000;
 
 export default function Page() {
   const [currentUser, setCurrentUser] = useState('');
   const [token, setToken] = useState('');
+  const [currentRoom, setCurrentRoom] = useState('general');
   const [messages, setMessages] = useState<Message[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
@@ -50,7 +50,7 @@ export default function Page() {
   const fetchMessages = useCallback(async () => {
     if (!token) return;
     try {
-      const response = await fetch(`/api/messages?roomId=${ROOM_ID}`);
+      const response = await fetch(`/api/messages?roomId=${currentRoom}`);
       if (!response.ok) throw new Error('Failed to fetch messages');
       const data = await response.json();
       // Filter out deleted messages
@@ -58,7 +58,7 @@ export default function Page() {
     } catch (error) {
       console.error('[v0] Error fetching messages:', error);
     }
-  }, [token]);
+  }, [token, currentRoom]);
 
   // Fetch online users
   const fetchOnlineUsers = useCallback(async () => {
@@ -89,7 +89,7 @@ export default function Page() {
         clearInterval(pollIntervalRef.current);
       }
     };
-  }, [isAuthenticated, currentUser, token, fetchMessages, fetchOnlineUsers]);
+  }, [isAuthenticated, currentUser, token, currentRoom, fetchMessages, fetchOnlineUsers]);
 
   const handleAuthSuccess = (username: string, authToken: string) => {
     setCurrentUser(username);
@@ -124,7 +124,7 @@ export default function Page() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            roomId: ROOM_ID,
+            roomId: currentRoom,
             username: currentUser,
             content: message.trim(),
           }),
@@ -168,6 +168,17 @@ export default function Page() {
     }
   };
 
+  const handleSelectUser = (selectedUsername: string) => {
+    if (!selectedUsername) {
+      // Go back to general chat
+      setCurrentRoom('general');
+    } else {
+      // Create DM room ID
+      const dmRoomId = [currentUser, selectedUsername].sort().join('_dm_').replace(/ /g, '_');
+      setCurrentRoom(dmRoomId);
+    }
+  };
+
   if (isLoading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-white">
@@ -184,6 +195,7 @@ export default function Page() {
     <ChatContainer
       messages={messages}
       currentUser={currentUser}
+      currentRoom={currentRoom}
       onSendMessage={handleSendMessage}
       onEditMessage={handleEditMessage}
       onDeleteMessage={handleDeleteMessage}
@@ -191,6 +203,7 @@ export default function Page() {
       onlineUsers={onlineUsers}
       isConnected={true}
       onLogout={handleLogout}
+      onSelectUser={handleSelectUser}
     />
   );
 }
