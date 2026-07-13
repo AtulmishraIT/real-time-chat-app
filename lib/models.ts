@@ -7,6 +7,10 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+  password: {
+    type: String,
+    required: true,
+  },
   status: {
     type: String,
     enum: ['online', 'offline'],
@@ -42,6 +46,13 @@ const messageSchema = new mongoose.Schema({
   timestamp: {
     type: Date,
     default: Date.now,
+  },
+  editedAt: {
+    type: Date,
+  },
+  deleted: {
+    type: Boolean,
+    default: false,
   },
 });
 
